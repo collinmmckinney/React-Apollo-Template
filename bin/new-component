@@ -1,0 +1,112 @@
+#! /bin/bash
+set -e
+
+DIR=src/components
+
+while getopts "ps:d:" opt; do
+  case $opt in
+    p)
+      DIR=src/pages
+      PAGE=true
+      ;;
+    d)
+      DIR=$OPTARG
+      ;;
+    s)
+      SUBCOMPONENT=$OPTARG
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      ;;
+  esac
+done
+
+COMPONENT=${@:$OPTIND:1}
+
+if [ "$SUBCOMPONENT" ]; then
+    DIR="${DIR}/${SUBCOMPONENT}"
+fi
+
+if [[ -z "$COMPONENT" ]]; then
+    echo "Error: please supply a component name"
+    exit 1
+fi
+
+COMPONENT_DIR="${DIR}/${COMPONENT}"
+UI_PATH="${COMPONENT_DIR}/ui.js"
+CONTAINER_PATH="${COMPONENT_DIR}/container.js"
+TEST_PATH="${COMPONENT_DIR}/test.js"
+STYLE_PATH="${COMPONENT_DIR}/styles.js"
+INDEX_PATH="${COMPONENT_DIR}/index.js"
+
+mkdir -p "$COMPONENT_DIR"
+
+cat > "$UI_PATH" << EOL
+import React, { PureComponent } from 'react';
+import PropTypes from 'prop-types';
+import { compose } from 'recompose';
+import { withStyles } from 'hoc/styles';
+import { Div, Text } from 'components';
+import { styles } from './styles';
+
+class ${COMPONENT} extends PureComponent {
+    static propTypes = {
+        styles: PropTypes.objectOf(PropTypes.object).isRequired
+    };
+
+    render() {
+        const { styles } = this.props;
+        return (
+            <Div styles={styles.container}>
+                <Text>${COMPONENT}</Text>
+            </Div>
+        );
+    }
+}
+
+export const ${COMPONENT}UI = compose(withStyles(styles))(${COMPONENT});
+EOL
+
+cat > "$CONTAINER_PATH" << EOL
+import React, { PureComponent } from 'react';
+import PropTypes from 'prop-types';
+import { compose } from 'recompose';
+import { ${COMPONENT}UI } from './ui';
+
+export class ${COMPONENT} extends PureComponent {
+    static displayName = '${COMPONENT}Container';
+
+    render() {
+        const { ...rest } = this.props;
+        return <${COMPONENT}UI {...rest} />;
+    }
+}
+
+export const ${COMPONENT}Container = compose()(${COMPONENT});
+EOL
+
+cat > "$STYLE_PATH" << EOL
+export const styles = ({ theme }) => ({
+    container: {
+        // You can probably delete this
+        backgroundColor: theme.colors.white01
+    }
+});
+EOL
+
+cat > "$TEST_PATH" << EOL
+import React from 'react';
+import { renderWithProviders } from 'utils/tests';
+import { ${COMPONENT}UI } from './ui';
+
+describe('${COMPONENT}', () => {
+    it('renders correctly', () => {
+        expect(renderWithProviders(<${COMPONENT}UI />)).toMatchSnapshot();
+    });
+});
+EOL
+
+
+cat > "$INDEX_PATH" << EOL
+export { ${COMPONENT}Container as ${COMPONENT} } from './container';
+EOL
